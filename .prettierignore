@@ -1,0 +1,5 @@
+node_modules/
+dist/
+coverage/
+docs/api-coverage.md
+docs/api-inventory.json

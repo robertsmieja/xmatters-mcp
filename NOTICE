@@ -1,0 +1,11 @@
+xMatters MCP Server
+Copyright 2026 Robert Smieja
+
+This is an independent community project. It is not affiliated with, endorsed
+by, or supported by xMatters. xMatters and other product names are trademarks
+of their respective owners.
+
+Endpoint metadata is derived from the publicly available xMatters REST API
+reference at https://help.xmatters.com/xmapi/. Documentation links identify the
+source of the API facts; the vendor documentation itself is not redistributed
+or relicensed under this project's Apache License.

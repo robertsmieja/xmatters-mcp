@@ -1,0 +1,71 @@
+{
+  "name": "@robertsmieja/xmatters-mcp",
+  "version": "0.1.0",
+  "description": "A comprehensive, safety-first xMatters REST API MCP server",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Robert Smieja",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/robertsmieja/xmatters-mcp.git"
+  },
+  "homepage": "https://github.com/robertsmieja/xmatters-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/robertsmieja/xmatters-mcp/issues"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "bin": {
+    "xmatters-mcp": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "docs/api-coverage.md",
+    "docs/api-inventory.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:coverage": "vitest run --project unit --coverage",
+    "test:integration": "vitest run --project integration",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "audit:api": "node scripts/audit-api.mjs --offline",
+    "audit:api:live": "node scripts/audit-api.mjs --live",
+    "check": "npm run format:check && npm run typecheck && npm run test:coverage && npm run build && npm run test:integration",
+    "start": "node dist/cli.js",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "xmatters",
+    "mcp",
+    "model-context-protocol",
+    "on-call",
+    "incident-management"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "@vitest/coverage-v8": "5.0.2",
+    "prettier": "3.6.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.2"
+  }
+}
