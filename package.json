@@ -35,7 +35,10 @@
     "CONTRIBUTING.md",
     "docs/api-coverage.md",
     "docs/api-inventory.json",
-    "docs/mcp-conformance.md"
+    "docs/mcp-conformance.md",
+    "docs/setup.md",
+    "docs/configuration.md",
+    "docs/tools.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
