@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { Tool, CallToolResult } from "@modelcontextprotocol/server";
 import { XMattersError, type ApiRequest } from "./client.js";
 
 export interface Operation {
@@ -132,6 +132,7 @@ export async function executeOperation(
   args: unknown,
   client: RequestExecutor,
   allowWrites = false,
+  signal?: AbortSignal,
 ): Promise<CallToolResult> {
   try {
     if (operation.method !== "GET" && !allowWrites) {
@@ -179,6 +180,7 @@ export async function executeOperation(
       path,
       responseType: operation.response,
     };
+    if (signal !== undefined) request.signal = signal;
     if (query !== undefined) request.query = query;
     if (body !== undefined) request.body = body;
     if (upload !== undefined) request.upload = upload;

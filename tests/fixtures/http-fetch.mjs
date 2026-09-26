@@ -5,12 +5,12 @@ globalThis.fetch = async (input, init) => {
     init?.method !== "GET" ||
     init?.redirect !== "manual"
   ) {
-    throw new Error("Unexpected request in stdio fixture");
+    throw new Error("Unexpected request in HTTP fixture");
   }
   const authorization = new Headers(init.headers).get("Authorization");
   if (
     authorization !==
-    `Basic ${Buffer.from("x-api-key-stdio-fixture:stdio-fixture-secret").toString("base64")}`
+    `Basic ${Buffer.from("x-api-key-http-fixture:http-fixture-secret").toString("base64")}`
   ) {
     throw new Error("Missing fixture authentication");
   }

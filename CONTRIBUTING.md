@@ -1,11 +1,18 @@
 # Contributing
 
-Use Node.js 22.12 or later (22, 24 and 26 are checked in CI).
+Use Node.js 22.12 or later (22, 24 and 26 are checked in CI), plus Bun 1.4.2 for runtime compatibility checks. Node remains the Vitest/V8 coverage and packaging harness; Bun server processes are exercised separately.
 
 ```sh
 npm ci
 npm run check
+npm run test:bun
 ```
+
+Bun package-manager path: `bun install --frozen-lockfile`, `bun run build`, then `bun run test:bun`. Do not substitute `bun test` or `bun --bun run test:coverage`: these are Vitest tests with Node V8 coverage, not Bun-test suites.
+
+For dependency changes, update `package.json` and `package-lock.json` using npm, then regenerate `bun.lock` from the npm lockfile using Bun (`bun install --lockfile-only` when initially importing; for later changes update both locks and compare the resolved direct versions). Verify clean `npm ci` and `bun install --frozen-lockfile` installations. Never hand-edit integrity values.
+
+Protocol changes must retain wire-level checks for MCP 2026-07-28 (not just a successful legacy initialization). Keep docs/mcp-conformance.md accurate, including authorization limitations. There is no stdio fallback.
 
 Write a failing unit test for each behavior before implementing it, then run it and the complete suite. Coverage gates apply to **unit tests only**, with a minimum of 80% statements, branches, functions, and lines across all runtime TypeScript sources; protocol integration tests are a separate check. Do not exclude uncovered source files to satisfy a gate.
 

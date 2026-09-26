@@ -372,13 +372,11 @@ export async function runCli(args, fetchImpl = fetch) {
     );
     return 0;
   }
-  if (
-    !(
-      (mode === "--offline" && args.length <= 1) ||
-      (mode === "--source" && args.length === 2) ||
-      (mode === "--live" && args.length === 1)
-    )
-  )
+  if (!(
+    (mode === "--offline" && args.length <= 1) ||
+    (mode === "--source" && args.length === 2) ||
+    (mode === "--live" && args.length === 1)
+  ))
     throw new Error("Invalid arguments; use --help");
   const [operations, inventory] = await Promise.all(
     ["../src/operations.json", "../docs/api-inventory.json"].map(async (file) =>

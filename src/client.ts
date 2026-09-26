@@ -1,3 +1,5 @@
+import { trackWork } from "./request-work.js";
+
 export type AuthConfig =
   | { type: "api-key"; apiKey: string; apiSecret: string }
   | { type: "basic"; username: string; password: string }
@@ -23,6 +25,8 @@ export interface ClientOptions {
 }
 
 export interface ApiRequest {
+  /** Caller cancellation. An issued mutation may still have taken effect. */
+  signal?: AbortSignal;
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   query?: Record<
@@ -172,6 +176,13 @@ function timeoutError(): XMattersError {
   );
 }
 
+function cancelledError(): XMattersError {
+  return new XMattersError(
+    "xMatters request cancelled; the request was not retried and may have taken effect",
+    { code: "CANCELLED" },
+  );
+}
+
 interface Deadline {
   signal: AbortSignal;
   check(): void;
@@ -179,33 +190,56 @@ interface Deadline {
 
 async function withDeadline<T>(
   expiresAt: number,
+  caller: AbortSignal | undefined,
   operation: (deadline: Deadline) => Promise<T>,
 ): Promise<T> {
   const controller = new AbortController();
-  const expire = () => {
-    const error = timeoutError();
-    controller.abort(error);
-    return error;
+  let failure: XMattersError | undefined;
+  let rejectStopped: ((error: XMattersError) => void) | undefined;
+  const stop = (error: XMattersError) => {
+    // Preserve the first cause; caller reasons must never cross this boundary.
+    if (!failure) {
+      failure = error;
+      controller.abort(error);
+      rejectStopped?.(error);
+    }
+    return failure;
+  };
+  const cancel = () => {
+    stop(cancelledError());
   };
   const deadline: Deadline = {
     signal: controller.signal,
     check: () => {
-      if (controller.signal.aborted || performance.now() >= expiresAt)
-        throw expire();
+      if (caller?.aborted) cancel();
+      if (performance.now() >= expiresAt) stop(timeoutError());
+      if (failure) throw failure;
     },
   };
   deadline.check();
-  let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(expire()), expiresAt - performance.now());
+  const stopped = new Promise<never>((_, reject) => {
+    rejectStopped = reject;
   });
+  const timer = setTimeout(
+    () => stop(timeoutError()),
+    expiresAt - performance.now(),
+  );
+  caller?.addEventListener("abort", cancel, { once: true });
   try {
-    const result = await Promise.race([operation(deadline), timeout]);
+    const result = await Promise.race([
+      trackWork(operation(deadline)),
+      stopped,
+    ]);
     deadline.check();
     return result;
   } finally {
-    clearTimeout(timer!);
+    clearTimeout(timer);
+    caller?.removeEventListener("abort", cancel);
   }
+}
+
+function cancelResponse(response: Response): void {
+  if (response.body) void trackWork(response.body.cancel()).catch(() => {});
 }
 
 async function readResponse(
@@ -227,7 +261,7 @@ async function readResponse(
     /^\d+$/.test(declared) &&
     Number(declared) > maximum
   ) {
-    void response.body?.cancel().catch(() => {});
+    cancelResponse(response);
     throw tooLarge;
   }
   if (!response.body) return Buffer.alloc(0);
@@ -240,8 +274,9 @@ async function readResponse(
       status: response.status,
     });
   }
+  let cancellation: Promise<void> | undefined;
   const cancel = () => {
-    void reader.cancel().catch(() => {});
+    cancellation ??= reader.cancel().catch(() => {});
   };
   signal.addEventListener("abort", cancel, { once: true });
   const chunks: Uint8Array[] = [];
@@ -257,9 +292,9 @@ async function readResponse(
     }
     return Buffer.concat(chunks, size);
   } catch (error) {
-    void reader.cancel().catch(() => {});
+    cancel();
     if (error === tooLarge) throw error;
-    if (signal.aborted) throw timeoutError();
+    deadline.check();
     throw new XMattersError("xMatters response stream failed", {
       code: "NETWORK_ERROR",
       status: response.status,
@@ -267,6 +302,9 @@ async function readResponse(
   } finally {
     signal.removeEventListener("abort", cancel);
     reader.releaseLock();
+    // Abort callbacks may run outside the request's async context. Register
+    // their cleanup here, back in the response reader's admission scope.
+    if (cancellation) trackWork(cancellation);
   }
 }
 
@@ -430,6 +468,7 @@ export class XMattersClient {
 
   async request(request: ApiRequest): Promise<unknown> {
     const snapshot = { ...request };
+    if (snapshot.signal?.aborted) throw cancelledError();
     const authenticating = snapshot.authAction !== undefined;
     if (authenticating && this.#authPending) {
       throw new XMattersError("An OAuth exchange is already in progress", {
@@ -563,7 +602,7 @@ export class XMattersClient {
       authorization = `Bearer ${this.#accessToken}`;
     }
     if (authorization !== undefined) this.#rememberSecret(authorization);
-    return withDeadline(expiresAt, async (deadline) => {
+    return withDeadline(expiresAt, request.signal, async (deadline) => {
       const result = await this.#send(
         url,
         request,
@@ -687,7 +726,6 @@ export class XMattersClient {
     init: RequestInit,
     deadline: Deadline,
   ): Promise<unknown> {
-    const { signal } = deadline;
     let response: Response;
     try {
       response = await (this.#options.fetch ?? globalThis.fetch)(
@@ -695,7 +733,7 @@ export class XMattersClient {
         init,
       );
     } catch {
-      if (signal.aborted) throw timeoutError();
+      deadline.check();
       throw new XMattersError(
         "xMatters transport failed; the request was not retried",
         { code: "NETWORK_ERROR" },
@@ -704,7 +742,7 @@ export class XMattersClient {
     try {
       deadline.check();
     } catch (error) {
-      void response.body?.cancel().catch(() => {});
+      cancelResponse(response);
       throw error;
     }
     let changedOrigin = false;
@@ -721,7 +759,7 @@ export class XMattersClient {
       changedOrigin;
     if (redirected || !response.ok) {
       // Do not parse or reflect error bodies: these can echo credentials and tokens.
-      void response.body?.cancel().catch(() => {});
+      cancelResponse(response);
       const value = response.headers.get("Retry-After");
       const retryAfter =
         (response.status === 429 || response.status === 503) &&
