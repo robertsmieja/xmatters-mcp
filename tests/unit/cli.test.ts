@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { fileURLToPath } from "node:url";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { start } from "../../src/cli.js";
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from "@modelcontextprotocol/client";
+import { runCli, start } from "../../src/cli.js";
 
 const env = {
   XMATTERS_BASE_URL: "https://example.xmatters.com",
   XMATTERS_API_KEY: "x-api-key-example",
   XMATTERS_API_SECRET: "test-only",
+  XMATTERS_MCP_TOKEN: "test-only-local-access-token-0123456789",
+  XMATTERS_MCP_PORT: "0",
 };
 
 describe("startup", () => {
@@ -35,26 +39,59 @@ describe("startup", () => {
       error.mockRestore();
     }
   });
-  it("wires configuration, actual catalog, client and transport without calling the tenant on startup", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>();
-    const [ct, st] = InMemoryTransport.createLinkedPair();
-    const server = await start(env, st, fetch);
-    const client = new Client({ name: "startup-test", version: "1.0.0" });
+
+  it("wires the catalog into authenticated modern HTTP without calling the tenant on startup", async () => {
+    const tenantFetch = vi.fn<typeof globalThis.fetch>();
+    const server = await start(env, tenantFetch);
+    const client = new Client(
+      { name: "startup-test", version: "1.0.0" },
+      { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+    );
     try {
-      await client.connect(ct);
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(server.url), {
+          requestInit: {
+            headers: { Authorization: `Bearer ${env.XMATTERS_MCP_TOKEN}` },
+          },
+        }),
+      );
+      expect(client.getProtocolEra()).toBe("modern");
       expect(
         (await client.listTools()).tools.some(
           (tool) => tool.name === "xmatters_get_people",
         ),
       ).toBe(true);
-      expect(fetch).not.toHaveBeenCalled();
+      expect(tenantFetch).not.toHaveBeenCalled();
     } finally {
       await client.close();
       await server.close();
     }
   });
-  it("rejects missing configuration before connecting transport", async () => {
-    const [, st] = InMemoryTransport.createLinkedPair();
-    await expect(start({}, st)).rejects.toThrow(/XMATTERS_BASE_URL/);
+  it("prints only the listening endpoint and handles signals without leaking listeners", async () => {
+    const before = new Set(process.listeners("SIGTERM"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const server = await runCli(env, []);
+    try {
+      expect(error).toHaveBeenCalledWith(
+        `xmatters-mcp: listening on ${server.url}`,
+      );
+      const signal = process.listeners("SIGTERM").find((fn) => !before.has(fn));
+      expect(signal).toBeTypeOf("function");
+      signal!("SIGTERM");
+      await server.close();
+      expect(new Set(process.listeners("SIGTERM"))).toEqual(before);
+      await expect(fetch(server.url)).rejects.toThrow();
+    } finally {
+      await server.close();
+      error.mockRestore();
+    }
+  });
+
+  it("rejects obsolete transport flags instead of silently using another transport", async () => {
+    await expect(runCli(env, ["--stdio"])).rejects.toThrow(/HTTP-only/);
+  });
+
+  it("rejects missing configuration before opening a listener", async () => {
+    await expect(start({})).rejects.toThrow(/XMATTERS_BASE_URL/);
   });
 });

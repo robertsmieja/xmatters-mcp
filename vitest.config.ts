@@ -10,6 +10,14 @@ export default defineConfig({
           testTimeout: 20000,
         },
       },
+      {
+        test: {
+          name: "bun",
+          include: ["tests/integration/**/*.test.ts"],
+          env: { XMATTERS_TEST_RUNTIME: "bun" },
+          testTimeout: 20000,
+        },
+      },
     ],
     coverage: {
       provider: "v8",

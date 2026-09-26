@@ -9,6 +9,37 @@ export interface ServerConfig {
   maxUploadBytes: number;
 }
 
+export interface HttpConfig {
+  token: string;
+  port: number;
+  maxRequestBytes: number;
+}
+
+export function loadHttpConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): HttpConfig {
+  const token = env.XMATTERS_MCP_TOKEN;
+  if (!token || !/^[A-Za-z0-9_-]{32,256}$/.test(token)) {
+    throw new Error(
+      "XMATTERS_MCP_TOKEN must be 32–256 URL-safe characters (A–Z, a–z, 0–9, _ or -)",
+    );
+  }
+  const portText = env.XMATTERS_MCP_PORT ?? "3000";
+  const port = Number(portText);
+  if (!/^\d+$/.test(portText) || !Number.isInteger(port) || port > 65535) {
+    throw new Error("XMATTERS_MCP_PORT must be an integer from 0 to 65535");
+  }
+  const maxRequestBytes = positiveInteger(
+    env,
+    "XMATTERS_MCP_MAX_REQUEST_BYTES",
+    16777216,
+  );
+  if (maxRequestBytes > 104857600) {
+    throw new Error("XMATTERS_MCP_MAX_REQUEST_BYTES must not exceed 100 MiB");
+  }
+  return { token, port, maxRequestBytes };
+}
+
 function required(env: NodeJS.ProcessEnv, key: string): string {
   const value = env[key];
   if (!value?.trim()) throw new Error(`${key} is required`);

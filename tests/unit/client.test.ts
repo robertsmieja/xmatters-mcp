@@ -569,6 +569,186 @@ describe("resource limits", () => {
   });
 });
 
+describe("caller cancellation", () => {
+  it("cancels a stalled body promptly and removes both caller and reader listeners", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const add = vi.spyOn(controller.signal, "addEventListener");
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    const { client, fetch } = setup();
+    const cancel = vi.fn(() => Promise.reject(new Error("test-password")));
+    const response = new Response(
+      new ReadableStream({
+        start(stream) {
+          stream.enqueue(Buffer.from("{"));
+        },
+        cancel,
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+    fetch.mockResolvedValue(response);
+    const settled = vi.fn();
+    const outcome = client
+      .request({ ...GET, signal: controller.signal })
+      .catch((error) => {
+        settled(error);
+        return error;
+      });
+    await vi.advanceTimersByTimeAsync(0);
+    const signal = fetch.mock.calls[0]![1]!.signal!;
+    const removeReader = vi.spyOn(signal, "removeEventListener");
+    controller.abort(new Error("test-password"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "CANCELLED" }),
+    );
+    const error = await outcome;
+    expectSafeError(error);
+    expect(error.message).not.toContain("test-password");
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body!.locked).toBe(false);
+    expect(removeReader).toHaveBeenCalledWith("abort", expect.any(Function));
+    expect(remove).toHaveBeenCalledWith("abort", add.mock.calls[0]![1]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([200, 401])(
+    "removes the caller listener after HTTP %s without aborting it",
+    async (status) => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const add = vi.spyOn(controller.signal, "addEventListener");
+      const remove = vi.spyOn(controller.signal, "removeEventListener");
+      const { client, fetch } = setup();
+      fetch.mockResolvedValue(Response.json({}, { status }));
+      await client
+        .request({ ...GET, signal: controller.signal })
+        .catch(() => {});
+      expect(controller.signal.aborted).toBe(false);
+      expect(add).toHaveBeenCalledOnce();
+      expect(remove).toHaveBeenCalledWith("abort", add.mock.calls[0]![1]);
+      expect(vi.getTimerCount()).toBe(0);
+      controller.abort(new Error("too late"));
+      expect(fetch.mock.calls[0]![1]!.signal!.aborted).toBe(false);
+    },
+  );
+
+  it("checks cancellation after synchronous body preparation before sending a write", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const { client, fetch } = setup();
+    const body = {
+      toJSON() {
+        controller.abort(new Error("test-password"));
+        return {};
+      },
+    };
+    await expect(
+      client.request({
+        ...GET,
+        method: "POST",
+        body,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ code: "CANCELLED" });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("retains TIMEOUT when caller cancellation follows the deadline", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const { client, fetch } = setup({ timeoutMs: 10 });
+    let finish!: (response: Response) => void;
+    fetch.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const outcome = client
+      .request({ ...GET, signal: controller.signal })
+      .catch((error) => error);
+    await vi.advanceTimersByTimeAsync(10);
+    controller.abort(new Error("test-password"));
+    finish(new Response(null, { status: 204 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await outcome).toMatchObject({ code: "TIMEOUT" });
+    expect(fetch.mock.calls[0]![1]!.signal!.reason).toMatchObject({
+      code: "TIMEOUT",
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it.each([true, false])(
+    "cancels pending fetch promptly (cooperative: %s)",
+    async (cooperative) => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const add = vi.spyOn(controller.signal, "addEventListener");
+      const remove = vi.spyOn(controller.signal, "removeEventListener");
+      const { client, fetch } = setup();
+      let rejectFetch!: (error: unknown) => void;
+      fetch.mockImplementation(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            rejectFetch = reject;
+            if (cooperative)
+              init!.signal!.addEventListener(
+                "abort",
+                () => reject(init!.signal!.reason),
+                { once: true },
+              );
+          }),
+      );
+      const settled = vi.fn();
+      const outcome = client
+        .request({ ...GET, signal: controller.signal })
+        .catch((error) => {
+          settled(error);
+          return error;
+        });
+      controller.abort(new Error("test-password"));
+      await vi.advanceTimersByTimeAsync(0);
+      try {
+        expect(settled).toHaveBeenCalledWith(
+          expect.objectContaining({ code: "CANCELLED" }),
+        );
+        const error = await outcome;
+        expectSafeError(error);
+        expect(`${error.message}${JSON.stringify(error)}`).not.toContain(
+          "test-password",
+        );
+        expect(error).not.toHaveProperty("cause");
+        expect(fetch.mock.calls[0]![1]!.signal!.reason).toMatchObject({
+          code: "CANCELLED",
+        });
+        expect(fetch).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+        expect(remove).toHaveBeenCalledWith("abort", add.mock.calls[0]![1]);
+      } finally {
+        rejectFetch(new Error("late test-password"));
+        await outcome;
+      }
+    },
+  );
+  it("rejects a pre-aborted request without sending or reflecting its reason", async () => {
+    vi.useFakeTimers();
+    const { client, fetch } = setup();
+    const signal = AbortSignal.abort(new Error("test-password"));
+    const error = await client
+      .request({ ...GET, signal })
+      .catch((error) => error);
+    expectSafeError(error);
+    expect(error).toMatchObject({ code: "CANCELLED" });
+    expect(`${error.message}${JSON.stringify(error)}`).not.toContain(
+      "test-password",
+    );
+    expect(error).not.toHaveProperty("cause");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
 describe("total request deadline", () => {
   it("times out even when fetch ignores AbortSignal and never settles", async () => {
     vi.useFakeTimers();
