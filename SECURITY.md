@@ -1,24 +1,41 @@
 # Security policy
 
-Report vulnerabilities privately using GitHub's **Report a vulnerability** feature when available, or contact the repository owner privately. Do not include credentials, tenant data, or customer information in public issues.
+Report vulnerabilities privately through GitHub's **Report a vulnerability** feature when available, or contact the repository owner privately. Do not put credentials, tenant data, or customer information in public issues.
 
-## Trust model
+## Supported version
 
-This is a local **Streamable HTTP** MCP server, fixed to `127.0.0.1`. It exposes only `/mcp`, requires a separate operator-provisioned bearer secret on every request, validates the exact Host, and rejects every request carrying an Origin header (including localhost, `null`, and empty origins). There is no browser/CORS support, stdio transport, shell, or filesystem tool.
+The maintained version on `main` receives security fixes. Tests use synthetic data; they are not vendor certification or production tenant acceptance tests. Review permissions, limits, and exact tool payloads before enabling writes.
 
-The local shared-secret gate is **not an implementation of MCP OAuth authorization**: there is no authorization-server discovery, protected-resource metadata, user consent flow, audience-bound issued token, or per-user scope policy. It is intentionally limited to trusted non-browser clients on the same host. Do not expose it to a network, tunnel, or reverse proxy as a public/multi-user MCP service. A remote deployment needs separately reviewed TLS and standards-compliant OAuth resource-server authorization. See [conformance boundaries](docs/mcp-conformance.md).
+## Local access boundary
 
-The process owner controls its environment and MCP host. Anyone able to change the environment or process can change the security policy. Local applications possessing the MCP token share the same configured xMatters identity and in-memory OAuth state; this is not a multi-tenant authorization boundary. Protect and rotate the MCP token separately from xMatters credentials. HTTP is not inherently safer than stdio, which remains part of the MCP specification.
+The server listens on `127.0.0.1` and exposes only `/mcp` over Streamable HTTP. Every request needs a separate operator-provided bearer token. The listener checks the exact Host and port and rejects every request with an Origin header, including localhost, `null`, and empty values. It has no browser/CORS support, stdio transport, shell tool, or filesystem tool.
 
-- Use a dedicated xMatters identity with least-privilege permissions. Endpoint coverage is not a grant of tenant permission.
-- API credentials are supplied through the process environment, never tool arguments. Avoid pasting secrets into chats, public issues, or checked-in MCP configuration. `.env` files are ignored by version control and not loaded by application code. **Bun loads them by default**; the documented launch commands use `--no-env-file` to disable this.
-- Only HTTPS xMatters tenant origins on port 443 are accepted. Redirects are not followed. Arbitrary URLs, path traversal, and model-controlled Authorization headers are not accepted.
-- Writes are disabled unless `XMATTERS_ALLOW_WRITES=true`. Every non-GET operation also requires `confirm: true`. This includes token acquisition/refresh. Confirmation is a host/user workflow convention, not proof that a human approved; use your MCP host's per-tool approval controls.
-- API responses and uploaded content are untrusted data, not instructions. xMatters responses may contain personal data, configuration secrets, scripts, or sensitive incident details: the MCP host receives data visible to the configured identity. Only grant access to appropriate users and models.
-- No automatic retry or implicit pagination occurs. A timed-out write may have succeeded. Investigate the exact resource before resending.
-- File uploads accept bounded base64 content, not local paths. Downloads return base64 content rather than writing files. Requests and responses have limits and deadlines.
-- Configured credentials and OAuth tokens must not be returned in MCP results. Unexpected failures are reported without raw stack traces or response bodies. This intentionally limits error detail.
+**The local token is not MCP OAuth authorization.** The server does not implement authorization-server discovery, protected-resource metadata, a user consent flow, audience-bound issued tokens, or per-user scopes. It supports trusted, non-browser clients on the same machine.
 
-## Supported scope
+Do not expose the listener to a network, tunnel, or public reverse proxy. A remote or multi-user deployment needs a separate security review, TLS, and standards-compliant OAuth resource-server authorization. See the [protocol and authorization boundaries](docs/mcp-conformance.md).
 
-The maintained version on `main` is the security-supported version. This community implementation has offline unit/transport tests, not a vendor certification or a production tenant acceptance test. Review permissions, limits, and the exact tool payload before enabling writes.
+The process owner controls the environment and MCP host and can change the security policy. Anyone with the MCP token shares the configured xMatters identity and in-memory OAuth state. This is not a multi-tenant boundary. Protect and rotate the MCP token separately from xMatters credentials.
+
+HTTP is not inherently safer than stdio. Removing stdio is a project choice, not a claim that the MCP specification deprecated it.
+
+## Credentials and outbound requests
+
+Use a dedicated xMatters identity with the least privileges needed. Endpoint coverage does not grant permissions.
+
+Supply API credentials through the server process's private environment, never tool arguments. Do not put them in chats, public issues, or checked-in host configuration. Git ignores `.env` files, and application code does not load them. Bun does load them by default; use the documented `--no-env-file` launch commands.
+
+The HTTP client accepts only HTTPS xMatters tenant origins on port 443. It does not follow redirects or accept arbitrary URLs, path traversal, or model-controlled Authorization headers. Configured credentials and OAuth tokens must not appear in MCP results. Unexpected errors omit raw stack traces and response bodies, which limits the available diagnostic detail.
+
+## Writes and uncertain outcomes
+
+Writes are disabled unless the operator sets `XMATTERS_ALLOW_WRITES=true`. Every non-GET operation also requires `confirm: true`, including OAuth token acquisition and refresh. That argument is a workflow safeguard, not proof of human consent; use the host's per-tool approval controls.
+
+The server does not retry requests or paginate automatically. A write may succeed before a timeout or cancellation reaches the client. Inspect the exact resource before resending. Cancelling a request does not roll back a remote change, and API acceptance does not prove alert delivery.
+
+## Data handling and resource limits
+
+Treat API responses and uploaded content as untrusted data, not instructions. xMatters responses may contain personal information, configuration secrets, scripts, or incident details. The MCP host receives the data visible to the configured identity, so restrict access to appropriate users and models.
+
+Uploads accept bounded base64 content, not local paths. Downloads return base64 rather than writing files. Incoming requests, outgoing requests, and responses have [size and time limits](docs/configuration.md#configurable-limits); the listener also limits request rate and concurrent work.
+
+Shutdown cancels active requests and waits for tracked cleanup. Library-injected code that ignores cancellation can keep shutdown waiting. See [cancellation and shutdown](docs/mcp-conformance.md#cancellation-and-shutdown) for details.

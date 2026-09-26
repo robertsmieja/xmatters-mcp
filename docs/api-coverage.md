@@ -1,10 +1,10 @@
-# Current public REST API coverage
+# Public REST API coverage audit
 
 ## Audit result
 
-**179 named operation tools cover every one of the 168 DEFINITION blocks in the current xMatters public REST reference.** The catalog expands those definitions into 177 operation/path variants and includes 2 additional paths documented in request examples.[1]
+In the recorded source snapshot, 179 named operation tools cover every one of the 168 DEFINITION blocks in the xMatters public REST reference. The catalog expands those definitions into 177 operation/path variants and includes 2 additional paths documented in request examples.[1]
 
-This is **current-reference coverage**, not a claim to implement every historical API version, every response self link, or every tenant-specific custom webhook format. No tenant requests were made during the source audit; source coverage is not proof that every operation is enabled or permitted in a particular tenant.
+This report records current-reference coverage for that snapshot. It does not claim to implement every historical API version, every response self link, or every tenant-specific custom webhook format. No tenant requests were made during the source audit. Source coverage is not proof that every operation is enabled or permitted in a particular tenant.
 
 | Audit fact | Value |
 | --- | --- |
@@ -22,7 +22,7 @@ This is **current-reference coverage**, not a claim to implement every historica
 | Unique method/path shapes (placeholder names collapsed) | 154 |
 | Uncovered DEFINITION blocks | 0 |
 
-Separate create and modify operations remain separate named tools even when both use `POST` on the same collection. Query-value examples are not inflated into separate tools. Distinct aliases, nested paths, and explicitly documented identifier templates are separate descriptors. Placeholder spelling and HTTP methods follow the reference; corrections are enumerated below rather than silently normalized.[1]
+Separate create and modify operations remain separate named tools even when both use `POST` on the same collection. Query-value examples do not create additional tools. Distinct aliases, nested paths, and explicitly documented identifier templates are separate descriptors. Placeholder spelling and HTTP methods follow the reference. The report lists corrections explicitly rather than silently normalizing them.[1]
 
 ### HTTP methods and encodings
 
@@ -36,7 +36,7 @@ Separate create and modify operations remain separate named tools even when both
 
 ## Reproduce the audit
 
-Run from the repository root, using the project's supported Node.js version:
+Run these commands from the repository root, using a [supported Node.js version](../CONTRIBUTING.md#prepare-your-environment):
 
 ```sh
 # Fully offline: descriptor contract, manifest, counts, correction mappings and catalog digest.
@@ -54,11 +54,11 @@ node --test tests/catalog-audit.test.mjs
 node --test --experimental-test-coverage --test-coverage-include='scripts/audit-api.mjs' tests/catalog-audit.test.mjs
 ```
 
-The catalog audit also runs inside the normal Vitest unit project via `tests/unit/catalog.test.ts`; that wrapper enforces independent 80% line, branch and function thresholds for the `.mjs` auditor, so it is not silently omitted from the TypeScript-only coverage configuration.
+The catalog audit also runs in the Vitest unit project through `tests/unit/catalog.test.ts`. That wrapper enforces independent 80% line, branch and function thresholds for the `.mjs` auditor, which the TypeScript-only coverage configuration does not include.
 
-The live fetch is fixed to the official public help URL, omits credentials, refuses redirects, has a 30-second timeout, and caps the response at 8 MiB. It never reads tenant configuration or calls a tenant API. A nonzero result means the catalog, source, coverage mapping, evidence or counts no longer match. Even an otherwise harmless upstream HTML change deliberately fails the raw-source digest check; review before refreshing provenance.
+The live fetch uses only the official public help URL, omits credentials, refuses redirects, has a 30-second timeout, and caps the response at 8 MiB. It never reads tenant configuration or calls a tenant API. The auditor exits with a nonzero status if the catalog, source, coverage mapping, evidence or counts no longer match. Even an otherwise harmless upstream HTML change fails the raw-source digest check. Review the change before refreshing provenance.
 
-The audited snapshot and a subsequent real `--live` run returned `ok: true`, 179 tools, 168 definitions, 1306 headings and zero errors. The audit-script unit suite was developed through observed RED/GREEN cycles; its executed coverage was 100% lines/functions and 86.99% branches. This is separate from the TypeScript runtime coverage gate.
+The recorded snapshot audit and a subsequent real `--live` run returned `ok: true`, 179 tools, 168 definitions, 1306 headings and zero errors. The audit-script unit suite was developed through observed RED/GREEN cycles; its recorded coverage was 100% lines/functions and 86.99% branches. This is separate from the TypeScript runtime coverage gate.
 
 ### Updating the catalog
 
@@ -68,16 +68,16 @@ The audited snapshot and a subsequent real `--live` run returned `ok: true`, 179
 4. Update `docs/api-inventory.json`: raw source hash/timestamp/byte count, all headings and definitions, each request-to-tool resolution, method/path/encoding manifest, and verbatim evidence for corrections or example-only additions. Update the canonical descriptor digest and recompute all counts.
 5. Update this report's group totals and tool manifest. Run offline/source/live audits and tests. A source-only comparison is insufficient if a descriptor changed.
 
-The inventory stores identifiers, endpoint definitions, short evidence quotations and coverage metadata, **not complete vendor chapters or example programs**. The catalog digest is SHA-256 of UTF-8 `JSON.stringify(operations)`; the reference digest is over the original downloaded bytes.
+The inventory stores identifiers, endpoint definitions, short evidence quotations and coverage metadata. It does not contain complete vendor chapters or example programs. The catalog digest is SHA-256 of UTF-8 `JSON.stringify(operations)`; the reference digest is over the original downloaded bytes.
 
 ## Request schema boundaries
 
 - JSON bodies remain open and may be **objects or top-level arrays**. This matters for recipient lists and sender/share permissions; an object-only body schema would omit documented requests.[1]
-- `bodyParams` and `queryParams` list documented names for discoverability, not a closed whitelist. Nested objects, device/property/form-section variants, inherited create fields used by modify operations, and tenant-defined JSON trigger properties remain usable.[1]
+- `bodyParams` and `queryParams` list documented names to help callers find fields; they are not a closed list of allowed fields. Nested objects, device/property/form-section variants, inherited create fields used by modify operations, and tenant-defined JSON trigger properties remain usable.[1]
 - `requiredBodyParams` / `requiredQueryParams` are conservative unconditional requirements. Empty lists do not imply the API has no requirements. Device types, incident lookup alternatives, recurrence fields, replacement policy and other conditional constraints are left to API validation. Contradictory upstream labels are documented rather than turned into invented mandatory fields.[1]
 - File uploads use a separate base64 file input, not arbitrary local filesystem access. The `file` name in body metadata denotes the documented multipart field; it is not a second required JSON file property.
 - OAuth token acquisition and refresh are two separate named `form` actions with `authAction: password` / `refresh`. All grant/client/credential values come from configuration, not model arguments. URL-authentication `apiKey` examples are audited but intentionally do not expose secrets in tool query arguments.
-- The requested trigger URL family is fixed in each descriptor. Arbitrary URLs, invented HTTP methods, SOAP envelopes, or tenant-private endpoints are not added as an escape hatch.
+- Each operation descriptor fixes its HTTP method and path template. The catalog does not accept arbitrary URLs, invented HTTP methods, SOAP envelopes, or tenant-private endpoints as alternatives.
 
 ## Scope and exclusions
 
@@ -97,7 +97,7 @@ The separate historical `/reapi` appendix explicitly labels its 2012–2015 meth
 
 ### Reviewed non-definition candidates
 
-The audit also inspected OAuth workflow/revocation/authorization headings, integration-script and shared-library-script headings, renamed/retired API groups, request-example paths, and response self links. These are not silently skipped.[1]
+The audit also inspected OAuth workflow/revocation/authorization headings, integration-script and shared-library-script headings, renamed/retired API groups, request-example paths, and response self links. The table records the reviewed candidates and decisions.[1]
 
 | Source heading | Candidate | Decision |
 | --- | --- | --- |
@@ -121,7 +121,7 @@ The audit also inspected OAuth workflow/revocation/authorization headings, integ
 
 ## Transparent corrections and conflicting examples
 
-Each entry below has short literal source quotations in `api-inventory.json`; the live audit checks that every quote still occurs in the cited source section. These are evidence-backed editorial decisions, **not tenant-verified behavioral guarantees**.[1]
+Each entry below has short literal source quotations in `api-inventory.json`. The live audit checks that every quote still occurs in the cited source section. These editorial decisions are backed by source evidence, not tenant-verified behavioral guarantees.[1]
 
 | ID | Resolution |
 | --- | --- |
@@ -143,7 +143,7 @@ Each entry below has short literal source quotations in `api-inventory.json`; th
 | C16 | Binary download operations return attachment contents even though example clients call response.json; honor response semantics over broken sample parsing. |
 | C17 | The Flow Trigger incident route is documented in cURL and JavaScript but absent from DEFINITION; Python omits /xm/1. Retain the two independently documented trigger families. |
 
-Additional non-semantic differences—placeholder case, a definition's trailing slash, and query-value example spelling—are preserved or described in operation notes. The inventory keeps every raw definition alongside its resolved route, so the reader can inspect exactly what changed.
+Additional non-semantic differences include placeholder case, a definition's trailing slash, and query-value example spelling. These are preserved or described in operation notes. The inventory keeps every raw definition alongside its resolved route so you can inspect exactly what changed.
 
 ## Group coverage
 
