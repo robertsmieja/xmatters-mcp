@@ -104,7 +104,21 @@ Keep the process running. If you chose port `0`, use the actual port in the star
 
 The local connection is ready when discovery succeeds. Do not test by opening the endpoint in a browser: the server rejects every request with an `Origin` header and does not support browser clients.
 
-If you chose an OAuth password or refresh grant, tenant tools return `AUTH_REQUIRED` until you explicitly acquire an access token. Follow [Enable writes](#enable-writes), then approve `xmatters_obtain_an_access_token_and_refresh_token` for the password grant or `xmatters_refresh_an_access_token` for the refresh grant, with `confirm: true`. These actions contact xMatters and use credentials from the server environment. For read-only OAuth startup instead, supply an access token obtained outside this server as `XMATTERS_ACCESS_TOKEN` and remove variables for other authentication modes.
+### Acquire an OAuth token, if required
+
+If you chose an OAuth password or refresh grant, tenant tools return `AUTH_REQUIRED` until you explicitly acquire an access token. These token actions contact xMatters and use credentials from the server environment.
+
+For read-only OAuth, use an access token obtained outside this server instead. Set `XMATTERS_ACCESS_TOKEN`, remove variables for other authentication modes, and restart the server to apply the change.
+
+To acquire a token through the server:
+
+1. Follow [Enable writes](#enable-writes).
+2. Review and approve the tool for your configured grant in your MCP host, with `confirm: true`:
+   - Password grant: `xmatters_obtain_an_access_token_and_refresh_token`.
+   - Refresh grant: `xmatters_refresh_an_access_token`.
+3. Check that the result's `data` contains `authenticated: true`. Tokens stay in server memory; they are not returned to the host.
+
+### Validate tenant access (optional)
 
 To validate tenant access, make a separately authorized, narrow GET through a discovered tool, such as `xmatters_get_people` with `{"query":{"limit":1}}`. This sends a real request and may return personal data. Check it in an approved environment, and do not treat one visible record or an empty result as a complete tenant inventory.
 
@@ -113,7 +127,7 @@ To validate tenant access, make a separately authorized, narrow GET through a di
 Enable writes only after reviewing the identity's permissions and your host's approval controls. Writes can change tenant data or page recipients.
 
 1. Stop the server, set `XMATTERS_ALLOW_WRITES=true` in its operator-controlled environment, and restart it.
-2. Review the exact operation, targets, recipients, and payload in your host before approving the call. Include `confirm: true` in that call's arguments. Token acquisition and refresh also require both approvals.
+2. Review the exact operation, targets, recipients, and payload in your host before approving the call. Include `confirm: true` in that call's arguments. OAuth token acquisition and refresh require the same write setting and per-call confirmation.
 3. Read back the exact resource after a change. For alerting actions, check downstream delivery separately; an accepted API request does not prove delivery.
 
 A model-provided confirmation flag is not proof of human consent. Keep host approvals enabled. After a timeout, cancellation, or ambiguous failure, inspect the target before resending. **Cancelling a write does not roll it back.**
@@ -126,6 +140,6 @@ To disable writes again, stop the server, unset `XMATTERS_ALLOW_WRITES` or set i
 - For HTTP 401 from the local listener, check the MCP token and header format. This token is separate from your xMatters credentials.
 - For HTTP 403 from the local listener, check that the host uses the bound loopback hostname and port and does not send an `Origin` header. Do not disable these checks or expose the listener through a proxy.
 - For HTTP 400, check your host's protocol version and required MCP metadata against the [protocol notes](mcp-conformance.md#http-and-version-validation).
-- For HTTP 429 from the local listener, reduce concurrent requests and observe `Retry-After`. The [local limits](configuration.md#fixed-listener-limits) are separate from xMatters rate limits.
+- For HTTP 429 from the local listener, send requests less frequently, reduce concurrent requests, and wait at least as long as `Retry-After` specifies before trying again. The [local limits](configuration.md#fixed-listener-limits) are separate from xMatters rate limits.
 
 Do not expose this listener through a network address, tunnel, or public reverse proxy. It uses a local shared secret, not MCP OAuth authorization. Read the [security policy](../SECURITY.md) before changing deployment assumptions.

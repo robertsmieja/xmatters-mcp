@@ -66,7 +66,7 @@ An already-issued write may have taken effect. Cancellation is not evidence of r
 
 SDK 2.1.0 closes the HTTP exchange without waiting for tool handlers to settle. Application request scopes therefore track tool execution, underlying fetch/response work, and response cancellation cleanup separately. A request's admission slot is released only after both the exchange and tracked work settle.
 
-Listener `close()`, also used for CLI SIGINT/SIGTERM, closes connections, requests cancellation through the SDK, and waits for those scopes, including previously disconnected requests. A custom executor/fetch or stream cleanup that ignores cancellation and never settles keeps its slot and can keep `close()` pending indefinitely. The application does not force-release slots to let outstanding work bypass the limit. Local abort does not guarantee that remote-side effects stop.
+Listener `close()`, also used for CLI SIGINT/SIGTERM, closes connections, requests cancellation through the SDK, and waits for those scopes, including previously disconnected requests. If a custom executor, fetch implementation, or stream cleanup ignores cancellation and never settles, it keeps its admission slot and can leave `close()` pending indefinitely. The application keeps these slots occupied so unfinished work still counts toward the concurrency limit. Local abort does not guarantee that remote-side effects stop.
 
 ### Local credentials and MCP OAuth
 
@@ -84,7 +84,7 @@ For acceptance commands, see [Run the checks](../CONTRIBUTING.md#run-the-checks)
 - Node integration tests launch the built CLI and the installed npm bin symlink, then use a real HTTP SDK client for discovery, catalog enumeration, synthetic API execution, resources, and read-only protection.
 - Bun integration tests launch server processes with Bun, including the TypeScript entrypoint and installed package, using the same HTTP acceptance path. Node remains the development harness; `bun run` alone does not verify the server runtime.
 - Upstream calls use a test-only preload or injected fetch. Tests require no tenant credentials and must never page real recipients.
-- Both runtimes exercise nine sequential active-request disconnects, pending fetches and stalled response bodies, active SIGINT/SIGTERM shutdown, and admission/shutdown retention through delayed noncooperative fetch settlement and late response cleanup.
+- Both runtimes test nine sequential active-request disconnects for each of two cases: pending fetches and stalled response bodies. They also test SIGINT/SIGTERM during active requests and verify that admission slots remain occupied and shutdown waits for fetches that ignore cancellation and for late response cleanup.
 
 These tests check the implementation's protocol target. They do not provide MCP certification or prove that every optional feature and every RFC edge case has been exhaustively audited. The [authorization exception](#local-credentials-and-mcp-oauth) is intentional and part of the supported deployment scope. A passing protocol suite is not a live xMatters tenant acceptance test.
 

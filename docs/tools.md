@@ -8,7 +8,7 @@ The catalog covers the [recorded public REST reference](api-coverage.md). It doe
 
 Each tool accepts only the top-level fields in its schema. Depending on the operation, those fields are:
 
-- `path`: required raw identifiers for path parameters. The server encodes each value as a single path segment. Values containing slashes, backslashes, percent escapes, control characters, or dot segments are rejected. Use a UUID instead when a resource name contains those characters.
+- `path`: required identifiers, supplied without URL encoding. The server encodes each value as a single path segment. It rejects values containing slashes, backslashes, percent signs, or control characters, and the values `.` and `..`. Where the endpoint supports UUIDs, use one instead of a resource name containing rejected characters.
 - `query`: API query parameters such as `offset`, `limit`, `embed`, filters, and dates. Values can be strings, numbers, booleans, or arrays of those values. Arrays become comma-separated values.
 - `body`: the complete JSON payload for a JSON operation. The schema checks transport shape and required top-level fields; it does not exhaustively check vendor enums, nested objects, or tenant-specific forms. Nested JSON remains extensible, and operations without required object fields can accept top-level arrays.
 - `upload`: file content and metadata for a multipart operation, described in [Uploads](#uploads).
