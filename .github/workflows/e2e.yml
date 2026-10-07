@@ -1,0 +1,42 @@
+name: Nix end-to-end
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: Isolated NixOS VM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        with:
+          enable_kvm: true
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            system-features = nixos-test benchmark big-parallel kvm
+      - name: Check hardware virtualization
+        run: test -r /dev/kvm && test -w /dev/kvm
+      - name: Build package and run end-to-end test
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix build .#e2e --out-link result-e2e --print-build-logs --keep-failed 2>&1 | tee e2e-build.log
+          cp -rL result-e2e e2e-result
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nix-e2e-${{ github.run_id }}
+          path: |
+            e2e-build.log
+            e2e-result/
+          if-no-files-found: warn
+          retention-days: 7

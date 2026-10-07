@@ -36,6 +36,7 @@ This is a project choice: stdio remains part of the MCP specification. HTTP is n
 - [MCP protocol and conformance boundaries](docs/mcp-conformance.md): supported behavior, design choices, and SDK limitations.
 - [Security policy](SECURITY.md): trust boundaries, deployment restrictions, and private vulnerability reporting.
 - [Contributing](CONTRIBUTING.md): development setup, checks, and catalog maintenance.
+- [Opt-in Nix end-to-end testing](docs/end-to-end-testing.md): packaged server, disposable VM, local HTTPS upstream and manual GitHub Actions dispatch.
 
 ## Coverage and verification
 
