@@ -66,6 +66,10 @@ npm pack --dry-run
 
 Resolve check failures before opening the pull request. In the pull request description, explain the scope, verification, and any upstream documentation inconsistencies. Synthetic tests and source audits do not verify live tenant behavior.
 
+## Opt-in Nix end-to-end test
+
+Run `nix build .#e2e --print-build-logs --out-link result-e2e` on a Linux KVM builder, or dispatch the **Nix end-to-end** GitHub Actions workflow manually. This launches the packaged executable in a disposable NixOS VM against a local HTTPS fixture; it never contacts a tenant. It is intentionally outside the normal checks. See [end-to-end testing](docs/end-to-end-testing.md) for prerequisites, scenarios, fresh reruns and diagnostics.
+
 ## Contribution license
 
 By contributing, you agree that your contributions are licensed under Apache-2.0.
