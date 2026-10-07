@@ -25,7 +25,7 @@ buildNpmPackage {
       ../docs
     ];
   };
-  npmDepsHash = "sha256-YVXBkfCzZn4n/e4ag8zJcE2Bi4bwaOCiSHmsPXaFcOw=";
+  npmDepsHash = "sha256-w8BGQA53IwwETpCjpgs2QaoPDgzFD6SLn2XGf3WNhcg=";
   npmPackFlags = [ "--ignore-scripts" ];
 
   meta = {
